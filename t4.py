@@ -5,60 +5,52 @@
 # target: Transfer 4th
 #------------------------------------------------
 
-import json, urllib
 import sys
+import os.path
 from os.path import basename
+import codecs
+import json
 from xlrd import open_workbook
 from xlutils.copy import copy
+from shutil import copyfile
 
 debug = 0
 verbose = 0
+make = 0
+path = './'
+conf = 't4.conf'
 
-s_rules = {
-	'target': {
-			'path': '',
-			'sheet_index': 0,
-			'beginrow': 2,
-			'cells': [
-				{'c': 0, 
-					'source': {
-						'id': '',
-						'op': 'copy',
-						'r': 2,
-						'c': 2
-					}
-				},
-				{'c': 1, 
-					's': {
-						'id': '',
-						'op': 'map'
-					}
-				}
-			]
+rules = [
+	{ 'path': 's.xls',
+		'name': '2014年1月',
+		'rows': [2, 4],
+		'op'	: 'dup',
+		'dst': {
+			'path': 't.xls',
+			'dup' : 't0.xls',
+			'name': '2014年1月',
+			'rows': [2, 12]
 		},
-	
-	'map': {
-			'id': '',
-			'path': '',
-			'sheet': 0,
-			'op': 'map',
-			'key': {
-				'r': 2,
-				'c': 5
-			}
+		'cells': [
+			{ 's': 2, 'd': 0 },
+			{ 's': 6, 'd': 1 }
+		]
 	},
-
-	'sources': [
-		{'path': '',
-			'sheet_index': 0,
-			'id': ''
-			'op': 'src',
-			'
-		}
-	]
-}
-
-m_name_no = {}
+	{ 'path': 'm.xls',
+		'name': '电子渠道',
+		'rows': [1, 82],
+		'op'	: 'map',
+		'dst': {
+			'path': 't0.xls',
+			'dup' : 't1.xls',
+			'name': '2014年1月',
+			'rows': [2, 12]
+		},
+		'cells': [
+			{ 's': { 'k': 3, 'v': 5 }, 'd': { 'k': 1, 'v': 'xxx' }}
+		]
+	}
+]
 
 def debug_output(*msg):
 	if debug: print('$', msg)
@@ -68,75 +60,121 @@ def version(argv):
 	sys.exit(0)
 
 def usage(argv, xcode):
-	print('usage: %s {-s source} {-t target} {-m map} '
+	print('usage: %s [-p path] [-c conf] '
 			'[-d debug] [-v verbose] [-h help]' % basename(argv[0]))
 	return (xcode)
 
-def read_map(f):
-	n = 2
-	r = 3
-	cb = 5
-	ce = cb + 1
-	
-	wb = open_workbook(f)
-	s = wb.sheet_by_index(n)#wb.sheet_by_name(n)
-	for row in range(r, s.nrows):
-		k = s.cell(row, cb).value
-		print(k, type(k))
-		m_name_no[k] = str(int(s.cell(row, ce).value))
+def isvalid_dir(path):
+	v = os.path.isdir(path) and os.path.exists(path)
+	return (v)
 
-##	for k in m_name_no.keys():
-##		print(k, m_name_no[k])
+def isvalid_file(path):
+	v = os.path.isfile(path) and os.path.exists(path)
+	return (v)
 
-def write_target(s, t):
-	src_ns = 2
-	src_row = 3
-	src_cols = [2, 5, 6]
-	tar_ns = 0
-	tar_row = 2
+def load_rules(conf):
+	c = codecs.open(conf, 'r', encoding='utf8').read()
+	j = json.loads(c, encoding='utf8')
+	debug_output('loaded rules:%s' % j)
+	return (j)
 
-	s_wb = open_workbook(s, formatting_info=True, on_demand=True)
-	s_s = s_wb.sheet_by_index(src_ns)
+def save_rules(conf, rules):
+	s = json.dumps(rules, indent=2, sort_keys=False)
+	codecs.open(conf, 'w', encoding='utf8').write(s)
+	debug_output('made rules:%s' % conf)
 
-	t_wb = copy(open_workbook(t, formatting_info=True))
-	t_s = t_wb.get_sheet(tar_ns)
-	print(t_s.name)
+def join(path, f):
+	return (os.path.join(path, f))
 
-	cnt = 0
-	for row in range(src_row, src_row+3):#s_s.nrows):
-		t_s.write(tar_row + cnt, 0, s_s.cell(row, 2).value)
-		print(s_s.cell(row, 2).ctype)
-		n_no = 'xxx'
-		c = s_s.cell(row, 6).value
-		if m_name_no.has_key(c): 
-			n_no = m_name_no[c]
-		t_s.write(tar_row + cnt, 1, n_no)
-		cnt = cnt + 1
+def sheetnum(path, name):
+	w = open_workbook(path)
+	ss = w.sheets();
+	for s in ss:
+		if s.name == name:
+			return (s.number)
+	return (None) 
 
-	t_wb.save(t)
-		
+def run(path, rules):
+	[trans(path, job) for job in rules]
+
+def trans(path, job):
+	job['path'] = join(path, job['path'])
+	if not (isvalid_file(job['path'])): 
+		debug_output('job:%s is not the valid file' % job['path'])
+		return
+
+	s_w = open_workbook(job['path'])
+	s_s = s_w.sheet_by_name(job['name'])
+
+	s_brow = job['rows'][0]
+	s_erow = job['rows'][1]
+
+	job['dst']['path'] = join(path, job['dst']['path'])
+	job['dst']['dup'] = join(path, job['dst']['dup'])
+
+	t_sn = sheetnum(job['dst']['path'], job['dst']['name'])
+	if None == t_sn:
+		debug_output('invalid dst sheet-name:%s' % job['dst']['name'])
+		return
+
+	copyfile(job['dst']['path'], job['dst']['dup'])
+	d_w = copy(open_workbook(job['dst']['dup'], formatting_info=True))
+
+	d_brow = job['dst']['rows'][0]
+	d_erow = job['dst']['rows'][1]
+	d_s = d_w.get_sheet(t_sn)
+	dr = d_brow
+
+	if 'dup' == job['op']:
+		for sr in range(s_brow, s_erow):
+			for c in job['cells']:
+				sc = s_s.cell(sr, c['s']).value
+				d_s.write(dr, c['d'], sc) 
+			dr += 1
+	elif 'map' == job['op']:
+		m = {}
+		for sr in range(s_brow, s_erow):
+			for c in job['cells']:
+				k = s_s.cell(sr, c['s']['k']).value
+				v = s_s.cell(sr, c['s']['v']).value
+				m[k] = v
+
+		s_w = open_workbook(job['dst']['path'])
+		s_s = s_w.sheet_by_name(job['dst']['name'])
+		s_brow = job['dst']['rows'][0]
+		s_erow = job['dst']['rows'][1]
+
+		for sr in range(s_brow, s_erow):
+			for c in job['cells']:
+				sc = s_s.cell(sr, c['d']['k']).value
+				mv = c['d']['v']
+				if m.has_key(sc):
+					mv = m[sc]
+				print('##', sc, mv)
+				d_s.write(dr, c['d']['k'], mv)	
+			dr += 1
+							
+	d_w.save(job['dst']['dup'])
+
 def main(argv):
 	import getopt
 
 	global debug, verbose
-	fsource = 'localhost'
-	ftarget = '8080'
-	fmap = None
+	global path, conf, rules, make
 
 	try:
 		(opts, args) = getopt.getopt(sys.argv[1:], 
-			's:t:m:dvh', 
-			['source=','target=','map=',
-			 'debug','verbose',
-			 'help', 'version'])
+			'p:c:mdvh', 
+			['path=','conf=','make-rules='
+			 'debug','verbose','help', 'version'])
 	except getopt.GetoptError, err:
 		print(str(err)+'!')
 		return (usage(100))
 
 	for (k, v) in opts:
-		if k in   ('-s', '--source'): fsource = v
-		elif k in ('-t', '--target'): ftarget = v
-		elif k in ('-m', '--map'): fmap = v
+		if k in   ('-p', '--path'): path = v
+		elif k in ('-c', '--conf'): conf = v
+		elif k in ('-m', '--make-rules'): make += 1
 		elif k in ('-d', '--debug'): debug += 1
 		elif k in ('-v', '--verbose'): verbose += 1
 		elif k in ('-h', '--help'): return(usage(argv, 0))
@@ -144,11 +182,26 @@ def main(argv):
 		else: return (200)
 
 	debug_output(argv)	
-	debug_output('''source:%s target:%s map:%s'''
-				 % (fsource, ftarget, fmap))
+	debug_output('''path:%s conf:%s''' % (path, conf))
 
-	read_map(fmap)
-	write_target(fsource, ftarget)
+	if not (isvalid_dir(path)):
+		debug_output(''''%s' is not the valid path''' % (path))
+		return (1)
+
+	conf = join(path, conf)
+	if make: 
+		save_rules(conf, rules)
+		return (0)
+
+	if not (isvalid_file(conf)):
+		debug_output(''''%s' is not the valid conf''' % (conf))	
+		return (2)
+
+	rules = load_rules(conf)
+	run(path, rules)
+	
+##	read_map(fmap)
+##	write_target(fsource, ftarget)
 
 	return (0)
 	
