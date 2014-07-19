@@ -8,6 +8,7 @@
 import sys
 import os.path
 from os.path import basename
+from os.path import abspath
 import codecs
 import json
 from xlrd import open_workbook
@@ -21,33 +22,34 @@ path = './'
 conf = 't4.conf'
 
 rules = [
-	{ 'path': 's.xls',
+	{ 'file': 's.xls',
 		'name': '2014年1月',
-		'rows': [2, 4],
+		'rows': [2, -1],
 		'op'	: 'dup',
 		'dst': {
-			'path': 't.xls',
+			'file': 't.xls',
 			'dup' : 't0.xls',
 			'name': '2014年1月',
-			'rows': [2, 12]
+			'rows': [2, -1]
 		},
 		'cells': [
 			{ 's': 2, 'd': 0 },
-			{ 's': 6, 'd': 1 }
+			{ 's': 6, 'd': 1 },
+			{ 's': -1, 'd': 4, 'v': '三类业务：省公司自主制定规范、自主运营的业务' }
 		]
 	},
-	{ 'path': 'm.xls',
-		'name': '电子渠道',
-		'rows': [1, 82],
+	{ 'file': 'm.xls',
+		'name': '电子渠道员工',
+		'rows': [2, -1],
 		'op'	: 'map',
 		'dst': {
-			'path': 't0.xls',
+			'file': 't0.xls',
 			'dup' : 't1.xls',
 			'name': '2014年1月',
-			'rows': [2, 12]
+			'rows': [2, -1]
 		},
 		'cells': [
-			{ 's': { 'k': 3, 'v': 5 }, 'd': { 'k': 1, 'v': 'xxx' }}
+			{ 's': { 'k': 5, 'v': 6 }, 'd': { 'k': 1, 'v': 'XXX' }}
 		]
 	}
 ]
@@ -94,44 +96,58 @@ def sheetnum(path, name):
 			return (s.number)
 	return (None) 
 
-def run(path, rules):
-	[trans(path, job) for job in rules]
+def srcrows(src, name, begin, end):
+	b = open_workbook(src)
+	s = b.sheet_by_name(name)
+	if end == -1: end = s.nrows
+	if begin > end: begin = end
+	return ((b, s, begin, end))
+
+def dstrows(dup, dst, name, begin, end):
+	b = open_workbook(dup, formatting_info=True)
+	s = b.sheet_by_name(name)
+	if begin == -1: s.nrows
+
+	wb = copy(b)
+	ws = wb.get_sheet(sheetnum(dst, name))
+	return (wb, ws, begin, end)
+
+def src_cell(src, row, cell):
+	if cell['s'] > -1:
+		return (src.cell(row, cell['s']).value)
+	else:
+		return (cell['v'])
 
 def trans(path, job):
-	job['path'] = join(path, job['path'])
-	if not (isvalid_file(job['path'])): 
-		debug_output('job:%s is not the valid file' % job['path'])
+	job['file'] = join(path, job['file'])
+	if not (isvalid_file(job['file'])): 
+		debug_output('job:%s is not a valid file' % job['file'])
 		return
 
-	s_w = open_workbook(job['path'])
-	s_s = s_w.sheet_by_name(job['name'])
+	(s_w, s_s, s_brow, s_erow) = srcrows(
+		job['file'], job['name'], job['rows'][0], job['rows'][1])
+	debug_output('open src-rows: %s|%s|%s|%s' % (s_w, s_s, s_brow, s_erow))
 
-	s_brow = job['rows'][0]
-	s_erow = job['rows'][1]
-
-	job['dst']['path'] = join(path, job['dst']['path'])
+	job['dst']['file'] = join(path, job['dst']['file'])
 	job['dst']['dup'] = join(path, job['dst']['dup'])
+	copyfile(job['dst']['file'], job['dst']['dup'])
+	debug_output('copied: %s' % job['dst']['dup'])
 
-	t_sn = sheetnum(job['dst']['path'], job['dst']['name'])
-	if None == t_sn:
-		debug_output('invalid dst sheet-name:%s' % job['dst']['name'])
-		return
+	(d_w, d_s, d_brow, d_erow) = dstrows(
+		job['dst']['dup'], job['dst']['file'], job['dst']['name'], 
+		job['dst']['rows'][0], job['dst']['rows'][1])
+	debug_output('open dst-rows: %s|%s|%s|%s' % (d_w, d_s, d_brow, d_erow))
 
-	copyfile(job['dst']['path'], job['dst']['dup'])
-	d_w = copy(open_workbook(job['dst']['dup'], formatting_info=True))
-
-	d_brow = job['dst']['rows'][0]
-	d_erow = job['dst']['rows'][1]
-	d_s = d_w.get_sheet(t_sn)
 	dr = d_brow
 
 	if 'dup' == job['op']:
+		debug_output('dupping: %s' % job['dst']['dup'])
 		for sr in range(s_brow, s_erow):
 			for c in job['cells']:
-				sc = s_s.cell(sr, c['s']).value
-				d_s.write(dr, c['d'], sc) 
+				d_s.write(dr, c['d'], src_cell(s_s, sr, c)) 
 			dr += 1
 	elif 'map' == job['op']:
+		debug_output('mapping: %s' % job['dst']['dup'])
 		m = {}
 		for sr in range(s_brow, s_erow):
 			for c in job['cells']:
@@ -139,10 +155,9 @@ def trans(path, job):
 				v = s_s.cell(sr, c['s']['v']).value
 				m[k] = v
 
-		s_w = open_workbook(job['dst']['path'])
-		s_s = s_w.sheet_by_name(job['dst']['name'])
-		s_brow = job['dst']['rows'][0]
-		s_erow = job['dst']['rows'][1]
+		(s_w, s_s, s_brow, s_erow) = srcrows(
+			job['dst']['file'], job['dst']['name'],
+			job['dst']['rows'][0], job['dst']['rows'][1])
 
 		for sr in range(s_brow, s_erow):
 			for c in job['cells']:
@@ -150,11 +165,11 @@ def trans(path, job):
 				mv = c['d']['v']
 				if m.has_key(sc):
 					mv = m[sc]
-				print('##', sc, mv)
 				d_s.write(dr, c['d']['k'], mv)	
 			dr += 1
 							
 	d_w.save(job['dst']['dup'])
+	debug_output('saved: %s' % job['dst']['dup'])
 
 def main(argv):
 	import getopt
@@ -182,6 +197,7 @@ def main(argv):
 		else: return (200)
 
 	debug_output(argv)	
+	path = abspath(path)
 	debug_output('''path:%s conf:%s''' % (path, conf))
 
 	if not (isvalid_dir(path)):
@@ -198,11 +214,8 @@ def main(argv):
 		return (2)
 
 	rules = load_rules(conf)
-	run(path, rules)
+	[trans(path, job) for job in rules]
 	
-##	read_map(fmap)
-##	write_target(fsource, ftarget)
-
 	return (0)
 	
 if __name__ == "__main__":
