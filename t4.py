@@ -112,7 +112,7 @@ def dstrows(dup, dst, name, begin, end):
 	ws = wb.get_sheet(sheetnum(dst, name))
 	return (wb, ws, begin, end)
 
-def src_cell(src, row, cell):
+def srccell(src, row, cell):
 	if cell['s'] > -1:
 		return (src.cell(row, cell['s']).value)
 	else:
@@ -144,7 +144,7 @@ def trans(path, job):
 		debug_output('dupping: %s' % job['dst']['dup'])
 		for sr in range(s_brow, s_erow):
 			for c in job['cells']:
-				d_s.write(dr, c['d'], src_cell(s_s, sr, c)) 
+				d_s.write(dr, c['d'], srccell(s_s, sr, c)) 
 			dr += 1
 	elif 'map' == job['op']:
 		debug_output('mapping: %s' % job['dst']['dup'])
