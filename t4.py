@@ -7,11 +7,15 @@
 
 import sys
 import os.path
-from os.path import basename
-from os.path import abspath
 import codecs
 import json
+import xlrd
+import xlwt
+import xlutils
+from os.path import basename
+from os.path import abspath
 from xlrd import open_workbook
+from xlwt import Workbook
 from xlutils.copy import copy
 from shutil import copyfile
 
@@ -23,33 +27,33 @@ conf = 't4.conf'
 
 rules = [
 	{ 'file': 's.xls',
-		'name': '2014年1月',
+		'name': '<SHEETNAME>',
 		'rows': [2, -1],
 		'op'	: 'dup',
 		'dst': {
 			'file': 't.xls',
 			'dup' : 't0.xls',
-			'name': '2014年1月',
+			'name': '<SHEETNAME>',
 			'rows': [2, -1]
 		},
 		'cells': [
 			{ 's': 2, 'd': 0 },
 			{ 's': 6, 'd': 1 },
-			{ 's': -1, 'd': 4, 'v': '三类业务：省公司自主制定规范、自主运营的业务' }
+			{ 's': -1, 'd': 4, 'v': '<DEFAULTVALUE>' }
 		]
 	},
 	{ 'file': 'm.xls',
-		'name': '电子渠道员工',
+		'name': '<SHEETNAME>',
 		'rows': [2, -1],
 		'op'	: 'map',
 		'dst': {
 			'file': 't0.xls',
 			'dup' : 't1.xls',
-			'name': '2014年1月',
+			'name': '<SHEETNAME>',
 			'rows': [2, -1]
 		},
 		'cells': [
-			{ 's': { 'k': 5, 'v': 6 }, 'd': { 'k': 1, 'v': 'XXX' }}
+			{ 's': { 'k': 5, 'v': 6 }, 'd': { 'k': 1, 'v': '<DEFAULTVALUE>' }}
 		]
 	}
 ]
@@ -75,14 +79,14 @@ def isvalid_file(path):
 	return (v)
 
 def load_rules(conf):
-	c = codecs.open(conf, 'r', encoding='utf8').read()
+	c = codecs.open(conf, 'rb', encoding='utf8').read()
 	j = json.loads(c, encoding='utf8')
 	debug_output('loaded rules:%s' % j)
 	return (j)
 
 def save_rules(conf, rules):
 	s = json.dumps(rules, indent=2, sort_keys=False)
-	codecs.open(conf, 'w', encoding='utf8').write(s)
+	codecs.open(conf, 'wb', encoding='utf8').write(s)
 	debug_output('made rules:%s' % conf)
 
 def join(path, f):
