@@ -10,8 +10,10 @@ setup(console=['t4.py'],
 
 			options={
 				'py2exe':{
-					'packages':['xlwt'],
-					'includes':['xlwt']
+					'optimize': 2
+					##'packages':['xml','xlwt']
+					##,
+					##'includes':['xlwt']
 				}
 			}
 		 )

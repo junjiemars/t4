@@ -54,4 +54,7 @@ docs/_build/
 
 # customized
 samples/
+dist/
 *.swp
+*.zip
+

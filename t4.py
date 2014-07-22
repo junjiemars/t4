@@ -10,13 +10,13 @@ import os.path
 import codecs
 import json
 import xlrd
-import xlwt
 import xlutils
 from os.path import basename
 from os.path import abspath
 from xlrd import open_workbook
-from xlwt import Workbook
 from xlutils.copy import copy
+#from xlwt.Utils import valid_sheet_name
+import xlwt
 from shutil import copyfile
 
 debug = 0
@@ -93,6 +93,8 @@ def join(path, f):
 	return (os.path.join(path, f))
 
 def sheetnum(path, name):
+	debug_output('%s is valid sheet name:%s' 
+		% (name, xlwt.Utils.valid_sheet_name(name)))
 	w = open_workbook(path)
 	ss = w.sheets();
 	for s in ss:
